@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Universal Lotus Bet Assistant Pro",
+  "version": "3.0.0",
+  "description": "Lightning-fast, framework-agnostic auto-stake injection engine.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://lotusbook.cc/*", "https://b2b.max247.co/*"],
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://lotusbook.cc/*"],
+      "js": ["content/content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected.js"],
+      "matches": ["https://lotusbook.cc/*"]
+    }
+  ]
+}

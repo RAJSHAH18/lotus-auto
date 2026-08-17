@@ -123,7 +123,7 @@
             totalSize: fixedStake,
             betSlipRef: 0,
             fromOneClick: 0,
-            betDelay: betDelay,
+            betDelay: 0,
             line: line,
             runner: runnerData.name
         };

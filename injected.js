@@ -1,8 +1,7 @@
-// injected.js – Direct API bets for lotusbook.cc (Fancy & Normal, betDelay=0)
+// injected.js – Direct API bets for lotusbook.cc (Universal Fancy/LINE/Normal/Bookmaker)
 (function() {
     'use strict';
 
-    // --- Toggle flag (set by content.js) ---
     if (window.__betEngineActive === false) {
         console.log('[BetEngine] Disabled – refresh to fully reset.');
         return;
@@ -10,12 +9,10 @@
 
     let STAKE = parseInt(localStorage.getItem('mangoStake'), 10) || 100;
 
-    // --- Toast function (sends message to content.js) ---
     function showToast(msg, success = true) {
         window.postMessage({ type: 'MANGO_TOAST', message: msg, success }, '*');
     }
 
-    // --- Get memberCode ---
     function getMemberCode() {
         const profileRaw = localStorage.getItem("userProfileDetails");
         if (profileRaw) {
@@ -48,7 +45,6 @@
         e.stopPropagation();
         e.preventDefault();
 
-        // --- Extract marketData and runnerData from React fiber ---
         let marketData = null, runnerData = null;
         let target = oddButton;
         while (target && target !== document.body) {
@@ -76,31 +72,44 @@
             return;
         }
 
-        // --- Detect FANCY market ---
-        const isFancy = 
-            marketData.isFancy === true ||
-            marketData.btype === "LINE" ||
-            marketData.oddsType === "HAAR_JEET" ||
-            (marketData.mtype && marketData.mtype.toUpperCase().includes("SESSION")) ||
-            (runnerData.line !== null && runnerData.line !== undefined);
-
         console.log("✅ Market Data:", marketData);
         console.log("✅ Runner Data:", runnerData);
-        console.log("✅ isFancy (detected):", isFancy);
+
+        // --- Detect market types ---
+        const isFancy = 
+            marketData.isFancy === true ||
+            marketData.tabGroupName === "Fancy" ||
+            marketData.dTabGroupName === "Fancy";
+
+        const isBookmaker = 
+            marketData.isBookmaker === true ||
+            marketData.isBookmakerOrMiniBookmaker === true ||
+            marketData.btype === "BOOKMAKER" ||
+            marketData.mtype === "BOOKMAKER";
 
         const oddType = oddButton.getAttribute('data-odd-type')?.toUpperCase();
         const sideVal = (oddType === "BACK") ? 0 : 1;
         const priceVal = Number(oddButton.getAttribute('data-price') || 0);
         const fixedStake = STAKE;
 
-        // --- Build payload (Fancy vs Normal, betDelay = 0) ---
-        let price, line;
-        if (isFancy) {
-            price = 100;               // fancy market price is always 100
-            line = priceVal;           // the run value
-        } else {
-            price = priceVal;          // normal odds
+        let price, line, betDelay;
+        const sideData = sideVal === 0 ? runnerData.back?.[0] : runnerData.lay?.[0];
+
+        if (isBookmaker) {
+            // Bookmaker: price = (displayed_odd / 100) + 1, line = null
+            price = (priceVal / 100) + 1;
             line = null;
+            betDelay = marketData.betDelay ?? 0;
+        } else if (isFancy) {
+            // Fancy: price and line come from runner's side data
+            price = sideData?.price ?? 100;
+            line = sideData?.line ?? priceVal;
+            betDelay = marketData.betDelay ?? 0;
+        } else {
+            // Normal / LINE: price = button odd, line = runner's line (if any)
+            price = priceVal;
+            line = sideData?.line ?? null;
+            betDelay = marketData.betDelay ?? 0;
         }
 
         const orderItem = {
@@ -114,12 +123,12 @@
             totalSize: fixedStake,
             betSlipRef: 0,
             fromOneClick: 0,
-            betDelay: 0,
+            betDelay: betDelay,
             line: line,
             runner: runnerData.name
         };
 
-        console.log("📦 [Payload]:", JSON.stringify([orderItem], null, 2));
+        console.log("📦 [Final Payload]:", JSON.stringify([orderItem], null, 2));
 
         const memberCode = getMemberCode();
         if (!memberCode) {
@@ -152,16 +161,14 @@
             try {
                 const json = JSON.parse(text);
                 console.log("✅ [Order Response]:", json);
-
                 if (json.success) {
                     showToast('Bet placed successfully', true);
                 } else {
-                    // --- EXACT ERROR PARSING FROM THE SITE'S SOURCE (57019) ---
                     let errorMsg = 'Something went wrong';
                     try {
-                        const nested = json.error?.details?.error?.[0]?.[0]?.description;
-                        if (nested) {
-                            errorMsg = nested;
+                        if (json.error && json.error["0"] && Array.isArray(json.error["0"])) {
+                            const firstError = json.error["0"][0];
+                            if (firstError && firstError.description) errorMsg = firstError.description;
                         } else if (json.error?.message && typeof json.error.message === 'string') {
                             errorMsg = json.error.message;
                         } else if (json.error?.details?.message) {
@@ -182,11 +189,10 @@
         }
     }, true);
 
-    // --- Stake update from widget ---
     document.addEventListener('updateStake', (e) => {
         STAKE = parseInt(e.detail.stake, 10) || 100;
         console.log('[BetEngine] Stake updated to', STAKE);
     });
 
-    console.log("⚡ Engine active (betDelay: 0, exact error toast).");
+    console.log("⚡ Universal engine active (including Bookmaker support).");
 })();
